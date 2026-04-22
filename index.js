@@ -7,25 +7,37 @@ const MOVE_COUNT = 5;
 
 const rl = readline.createInterface({ input, output });
 
+// Simple in-memory cache to avoid repeated API calls
+const cache = new Map();
+
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function formatName(value) {
+function formatName(value = "") {
   return value
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
 
+// Fetch JSON with caching to reduce API requests
 async function getJson(url) {
+  if (cache.has(url)) return cache.get(url);
+
   const response = await fetch(url);
+
   if (!response.ok) {
-    throw new Error(`Erreur API: ${response.status} ${response.statusText}`);
+    throw new Error(`API error: ${response.status} ${response.statusText}`);
   }
-  return response.json();
+
+  const data = await response.json();
+  cache.set(url, data);
+
+  return data;
 }
 
+// Build a move set by filtering usable offensive moves
 async function buildMoves(moveEntries) {
   const shuffled = [...moveEntries].sort(() => Math.random() - 0.5);
   const selected = [];
@@ -44,7 +56,7 @@ async function buildMoves(moveEntries) {
 
       if (!isUsable) continue;
 
-      // On veut 5 moves avec des puissances différentes
+      // Avoid duplicate power values for variety
       if (selected.some((m) => m.power === move.power)) continue;
 
       selected.push({
@@ -55,17 +67,18 @@ async function buildMoves(moveEntries) {
         ppLeft: move.pp,
       });
     } catch {
-      // On ignore les moves problématiques
+      // Ignore invalid or failed move fetches
     }
   }
 
   if (selected.length < MOVE_COUNT) {
-    throw new Error("Pas assez de moves offensifs avec des puissances différentes.");
+    throw new Error("Not enough valid offensive moves found.");
   }
 
   return selected;
 }
 
+// Fetch a Pokémon and attach its processed move set
 async function fetchPokemon(identifier) {
   const data = await getJson(`${API_BASE}/pokemon/${identifier}`);
   const moves = await buildMoves(data.moves);
@@ -77,50 +90,62 @@ async function fetchPokemon(identifier) {
   };
 }
 
+// Ask the player to choose a Pokémon with basic validation
 async function askPlayerPokemon() {
   while (true) {
     const answer = await rl.question(
-      "Choisis ton Pokémon (ex: pikachu, charizard, bulbasaur) : "
+      "Choose your Pokémon (pikachu, charizard, etc): "
     );
 
     const name = answer.trim().toLowerCase();
+
     if (!name) {
-      console.log("Entre un nom valide.");
+      console.log("Please enter a valid name.");
       continue;
     }
 
     try {
       return await fetchPokemon(name);
     } catch {
-      console.log(`Impossible de charger "${name}". Réessaie.`);
+      console.log(`Could not load "${name}". Try again.`);
     }
   }
 }
 
+// Damage calculation with small randomness factor
+function calculateDamage(move) {
+  const variance = 0.85 + Math.random() * 0.3;
+  return Math.floor(move.power * variance);
+}
+
+// Select bot Pokémon randomly, avoiding the player's choice
 async function getRandomBotPokemon(excludedName) {
   while (true) {
     const id = randomInt(1, 151);
 
     try {
       const pokemon = await fetchPokemon(id);
+
       if (pokemon.name !== excludedName) {
         return pokemon;
       }
     } catch {
-      // on retente
+      // Retry on failure
     }
   }
 }
 
 function printStatus(player, bot) {
   console.log("\n==============================");
-  console.log(`${formatName(player.name)} : ${player.hp} HP`);
-  console.log(`${formatName(bot.name)} : ${bot.hp} HP`);
+  console.log(`${formatName(player.name)}: ${player.hp} HP`);
+  console.log(`${formatName(bot.name)}: ${bot.hp} HP`);
   console.log("==============================\n");
 }
 
+// Ask player to pick a move
 async function askPlayerMove(player) {
-  console.log("Tes moves :");
+  console.log("Your moves:");
+
   player.moves.forEach((move, index) => {
     console.log(
       `${index + 1}. ${formatName(move.name)} | power: ${move.power} | accuracy: ${move.accuracy}% | pp: ${move.ppLeft}/${move.maxPP}`
@@ -128,45 +153,46 @@ async function askPlayerMove(player) {
   });
 
   while (true) {
-    const answer = await rl.question("Choisis un move (1-5) : ");
+    const answer = await rl.question("Choose a move (1-5): ");
     const choice = Number(answer);
 
-    if (Number.isInteger(choice) && choice >= 1 && choice <= player.moves.length) {
+    if (
+      Number.isInteger(choice) &&
+      choice >= 1 &&
+      choice <= player.moves.length
+    ) {
       return player.moves[choice - 1];
     }
 
-    console.log("Choix invalide. Réessaie.");
+    console.log("Invalid choice, try again.");
   }
 }
 
-function chooseRandomMove(pokemon) {
-  const index = Math.floor(Math.random() * pokemon.moves.length);
-  return pokemon.moves[index];
+// Bot selects strongest available move
+function chooseBestMove(pokemon) {
+  const usable = pokemon.moves.filter((m) => m.ppLeft > 0);
+
+  if (usable.length === 0) return null;
+
+  return usable
+    .map((m) => ({
+      move: m,
+      score: m.power * (m.accuracy / 100),
+    }))
+    .sort((a, b) => b.score - a.score)[0].move;
 }
 
+// Simple rule that blocks attack based on PP comparison (kept as-is from design)
 function canAttack(move, enemyMove) {
   if (move.ppLeft <= 0) return false;
-
-  // Règle appliquée littéralement depuis le slide :
-  // si le PP du move est inférieur à celui de l'adversaire,
-  // l'attaque ne part pas.
   return move.ppLeft >= enemyMove.ppLeft;
 }
 
+// Execute an attack attempt
 function attemptAttack(attacker, defender, move, enemyMove) {
-  if (move.ppLeft <= 0) {
-    console.log(
-      `${formatName(attacker.name)} ne peut pas utiliser ${formatName(move.name)} : PP épuisés.`
-    );
-    return;
-  }
+  if (move.ppLeft <= 0) return;
 
-  if (!canAttack(move, enemyMove)) {
-    console.log(
-      `${formatName(attacker.name)} ne peut pas lancer ${formatName(move.name)} car son PP (${move.ppLeft}) est inférieur au PP adverse (${enemyMove.ppLeft}).`
-    );
-    return;
-  }
+  if (!canAttack(move, enemyMove)) return;
 
   move.ppLeft -= 1;
 
@@ -174,33 +200,35 @@ function attemptAttack(attacker, defender, move, enemyMove) {
 
   if (hitRoll > move.accuracy) {
     console.log(
-      `${formatName(attacker.name)} utilise ${formatName(move.name)}, mais l'attaque rate.`
+      `${formatName(attacker.name)} used ${formatName(move.name)} but missed.`
     );
     return;
   }
 
-  const damage = move.power;
+  const damage = calculateDamage(move);
   defender.hp = Math.max(0, defender.hp - damage);
 
   console.log(
-    `${formatName(attacker.name)} utilise ${formatName(move.name)} et inflige ${damage} dégâts à ${formatName(defender.name)}.`
+    `${formatName(attacker.name)} used ${formatName(
+      move.name
+    )} and dealt ${damage} damage.`
   );
 }
 
+// Main battle loop
 async function battle(player, bot) {
-  console.log(`\nTon Pokémon : ${formatName(player.name)}`);
-  console.log(`Pokémon du bot : ${formatName(bot.name)}\n`);
+  console.log(`\n${formatName(player.name)} vs ${formatName(bot.name)}\n`);
 
   let round = 1;
 
   while (player.hp > 0 && bot.hp > 0) {
-    console.log(`===== Tour ${round} =====`);
+    console.log(`Round ${round}`);
     printStatus(player, bot);
 
     const playerMove = await askPlayerMove(player);
-    const botMove = chooseRandomMove(bot);
+    const botMove = chooseBestMove(bot);
 
-    console.log(`Le bot a choisi ${formatName(botMove.name)}.`);
+    console.log(`Bot chose ${formatName(botMove.name)}.`);
 
     attemptAttack(player, bot, playerMove, botMove);
 
@@ -208,29 +236,29 @@ async function battle(player, bot) {
 
     attemptAttack(bot, player, botMove, playerMove);
 
-    round += 1;
+    round++;
   }
 
   printStatus(player, bot);
 
   if (player.hp > 0) {
-    console.log(`Bravo, ${formatName(player.name)} gagne !`);
+    console.log(`${formatName(player.name)} wins.`);
   } else {
-    console.log(`Le bot gagne avec ${formatName(bot.name)}.`);
+    console.log(`${formatName(bot.name)} wins.`);
   }
 }
 
 async function main() {
   try {
-    console.log("=== Mini jeu Pokémon ===");
-    console.log("HP de départ : 300 pour chaque joueur.\n");
+    console.log("Pokémon battle simulator starting...");
+    console.log("Each Pokémon starts with 300 HP.\n");
 
     const player = await askPlayerPokemon();
     const bot = await getRandomBotPokemon(player.name);
 
     await battle(player, bot);
   } catch (error) {
-    console.error("Erreur :", error.message);
+    console.error("Error:", error.message);
   } finally {
     rl.close();
   }
