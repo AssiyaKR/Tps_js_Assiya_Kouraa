@@ -1,0 +1,44 @@
+doctype html
+html(lang="fr")
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport" content="width=device-width, initial-scale=1.0")
+    title= title || "BookShelf"
+    script(src="https://cdn.tailwindcss.com")
+    style.
+      body {
+        background-color: #F5F0E8;
+        color: #1A1A2E;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+      }
+      .form-input {
+        width: 100%;
+        padding: 0.625rem 0.875rem;
+        border: 2px solid #1A1A2E;
+        background: white;
+        font-size: 0.95rem;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      .form-input:focus {
+        border-color: #C0392B;
+      }
+      .btn-primary {
+        width: 100%;
+        padding: 0.75rem;
+        background: #1A1A2E;
+        color: #F5F0E8;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        border: 2px solid #1A1A2E;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-primary:hover {
+        background: #C0392B;
+        border-color: #C0392B;
+      }
+  body
+    block content

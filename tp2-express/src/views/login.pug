@@ -1,0 +1,33 @@
+extends layout
+
+block content
+  .min-h-screen.flex.items-center.justify-center(style="background: #F5F0E8; padding: 2rem;")
+    .w-full(style="max-width: 400px;")
+
+      .text-center(style="margin-bottom: 2.5rem;")
+        p(style="font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: #C0392B; font-weight: 700; margin-bottom: 0.5rem;") Bienvenue sur
+        h1(style="font-family: Georgia, serif; font-size: 2.8rem; font-weight: 400; color: #1A1A2E; line-height: 1;") BookShelf
+        p(style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;") Ta bibliothèque personnelle
+
+      if error
+        div(style="background: #fff0f0; border-left: 4px solid #C0392B; padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #C0392B;")
+          = error
+
+      div(style="background: white; border: 2px solid #1A1A2E; padding: 2rem;")
+        h2(style="font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase; color: #666; margin-bottom: 1.5rem; font-weight: 700;") Connexion
+
+        form(action="/auth/login" method="POST")
+
+          div(style="margin-bottom: 1.1rem;")
+            label(for="username" style="display: block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.4rem;") Nom d'utilisateur
+            input#username.form-input(type="text" name="username" placeholder="Ton nom d'utilisateur" required)
+
+          div(style="margin-bottom: 1.5rem;")
+            label(for="password" style="display: block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.4rem;") Mot de passe
+            input#password.form-input(type="password" name="password" placeholder="Ton mot de passe" required)
+
+          button.btn-primary(type="submit") Se connecter →
+
+      p(style="text-align: center; margin-top: 1.25rem; font-size: 0.85rem; color: #666;")
+        | Pas encore de compte ?&nbsp;
+        a(href="/auth/register" style="color: #C0392B; font-weight: 700; text-decoration: none;") S'inscrire
